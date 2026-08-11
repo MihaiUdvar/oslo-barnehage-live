@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- CSP restricts all content sources to trusted origins only. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://*.tile.openstreetmap.org https://unpkg.com data:; connect-src 'self' https://unpkg.com https://barnehagefakta.no;" />
+  <title>Oslo Barnehage Finder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --bg-1: #0b1f2a;
+      --bg-2: #0f3a46;
+      --card: #ffffff;
+      --text: #12202a;
+      --muted: #5b6b76;
+      --line: #dbe5ea;
+      --accent: #0f766e;
+      --accent-2: #f59e0b;
+      --shadow: 0 12px 30px rgba(8, 33, 46, 0.18);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Source Sans 3", sans-serif;
+      background:
+        radial-gradient(90rem 40rem at 10% -10%, rgba(245,158,11,0.22), transparent 60%),
+        radial-gradient(70rem 50rem at 100% 0%, rgba(22,163,74,0.18), transparent 60%),
+        linear-gradient(140deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .shell {
+      max-width: 1500px;
+      margin: 0 auto;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: #ecf4f7;
+      animation: reveal .5s ease;
+    }
+
+    @keyframes reveal {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: linear-gradient(120deg, #0f3b49, #12685f);
+      color: #f2f8f9;
+    }
+
+    .title-wrap h1 {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      font-size: clamp(20px, 3vw, 30px);
+      letter-spacing: 0.2px;
+    }
+
+    .title-wrap p {
+      margin: 4px 0 0;
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-select {
+      border: 1px solid rgba(255,255,255,0.35);
+      color: #fff;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+
+    .lang-select option { color: #111; }
+
+    .source-link {
+      color: #fff;
+      text-decoration: none;
+      font-size: 18px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.35);
+    }
+
+    .source-link:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      min-height: calc(100vh - 130px);
+    }
+
+    .panel {
+      background: #f6fbfd;
+      border-right: 1px solid var(--line);
+      padding: 16px;
+      overflow: auto;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #1f3b48;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      border: 1px solid #cddde3;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .seg {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      background: #e4eef2;
+      border-radius: 12px;
+      padding: 4px;
+    }
+
+    .seg button {
+      border: 0;
+      border-radius: 9px;
+      padding: 8px 6px;
+      cursor: pointer;
+      background: transparent;
+      color: #234;
+      font-weight: 600;
+      font-size: 13px;
+      transition: .2s ease;
+    }
+
+    .seg button.active {
+      background: #fff;
+      color: var(--accent);
+      box-shadow: 0 3px 9px rgba(14,45,56,0.15);
+    }
+
+    .stats {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .stat {
+      border: 1px solid #d7e6ec;
+      background: white;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .stat .k { font-size: 12px; color: var(--muted); }
+    .stat .v { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; color: #0f3b49; }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .map-pane {
+      height: clamp(240px, 46vh, 520px);
+      min-height: 220px;
+      max-height: 75vh;
+      position: relative;
+      border-bottom: 1px solid #d7e6ec;
+    }
+
+    #map { width: 100%; height: 100%; min-height: 220px; }
+
+    .map-resizer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 14px;
+      cursor: ns-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(to bottom, rgba(15, 59, 73, 0), rgba(15, 59, 73, 0.08));
+      user-select: none;
+      touch-action: none;
+    }
+
+    .map-resizer::before {
+      content: "";
+      width: 54px;
+      height: 4px;
+      border-radius: 999px;
+      background: #8ca6b3;
+    }
+
+    .results {
+      padding: 12px;
+      overflow: auto;
+      background: #eef5f8;
+      border-top: 1px solid #d7e6ec;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #dbe7ec;
+      border-radius: 14px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 16px;
+      font-family: "Space Grotesk", sans-serif;
+      line-height: 1.25;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      font-size: 12px;
+      background: #f1f7fa;
+      border: 1px solid #d8e6ed;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #284353;
+    }
+
+    .meta { font-size: 13px; color: #3a5565; }
+    .link { color: #0f766e; text-decoration: none; font-weight: 600; }
+    .link:hover { text-decoration: underline; }
+
+    .live-btn {
+      width: 100%;
+      border: 1px solid #cddde3;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: #1f3b48;
+      transition: .2s ease;
+    }
+    .live-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .live-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .live-btn.active:hover { color: #fff; }
+    .live-btn:disabled { opacity: .6; cursor: wait; }
+
+    .live-updated { font-size: 12px; color: var(--muted); }
+
+    .spinner {
+      display: inline-block;
+      width: 15px;
+      height: 15px;
+      border: 2px solid rgba(15, 118, 110, 0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: -3px;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 28px 16px;
+      font-size: 14px;
+    }
+
+    .addr-link {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-color: #9db8c4;
+      text-underline-offset: 2px;
+    }
+    .addr-link:hover { color: var(--accent); }
+
+    .btn {
+      display: inline-block !important;
+      padding: 8px 14px !important;
+      margin: 4px 2px !important;
+      background: #0f766e !important;
+      color: #fff !important;
+      text-decoration: none !important;
+      border-radius: 6px;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+    }
+    .btn:hover { background: #0d5f59 !important; }
+    .links { margin-top: 8px; }
+
+    .empty {
+      background: #fff;
+      border: 1px dashed #b8ccd6;
+      border-radius: 14px;
+      padding: 16px;
+      color: #4e6472;
+    }
+
+    @media (max-width: 1020px) {
+      .layout { grid-template-columns: 1fr; }
+      .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+      .map-pane { height: clamp(220px, 38vh, 420px); max-height: 68vh; }
+      .result-grid { grid-template-columns: 1fr; }
+      body { padding: 10px; }
+      .shell { border-radius: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="title-wrap">
+        <h1 id="title"></h1>
+        <p id="subtitle"></p>
+      </div>
+      <div class="top-actions">
+        <a href="https://github.com/tfreyd/oslo_barnehage_2026" target="_blank" rel="noopener" class="source-link" aria-label="Source code">⚡</a>
+        <select id="lang" class="lang-select" aria-label="Language">
+          <option value="no">Norsk</option>
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="ar">العربية</option>
+          <option value="ku">Kurdî</option>
+          <option value="so">Soomaali</option>
+          <option value="tr">Türkçe</option>
+          <option value="pl">Polski</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="hi">हिन्दी</option>
+          <option value="fa">فارسی</option>
+        </select>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="panel">
+        <div class="controls">
+          <div class="field">
+            <label id="lbl-search" for="search"></label>
+            <input id="search" type="text" />
+          </div>
+
+          <div class="field">
+            <label id="lbl-bydel" for="bydel"></label>
+            <select id="bydel"><option value="ALL"></option></select>
+          </div>
+
+          <div class="field">
+            <label id="lbl-mode"></label>
+            <div class="seg" role="tablist" aria-label="mode">
+              <button data-mode="both" class="active" type="button"></button>
+              <button data-mode="liten" type="button"></button>
+              <button data-mode="stor" type="button"></button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label id="lbl-zip" for="zipCode"></label>
+            <select id="zipCode"><option value="ALL"></option></select>
+          </div>
+
+          <div class="field">
+            <label id="lbl-min" for="minSpots"></label>
+            <input id="minSpots" type="number" min="0" step="1" value="0" />
+          </div>
+
+          <div class="field">
+            <button id="liveToggle" class="live-btn" type="button" aria-pressed="false"></button>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="k" id="k-match"></div><div class="v" id="v-match">0</div></div>
+          <div class="stat"><div class="k" id="k-liten"></div><div class="v" id="v-liten">0</div></div>
+          <div class="stat"><div class="k" id="k-stor"></div><div class="v" id="v-stor">0</div></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <section class="map-pane" id="mapPane">
+          <div id="map"></div>
+          <div class="map-resizer" id="mapResizer" aria-label="Resize map" title="Drag to resize map"></div>
+        </section>
+        <section class="results">
+          <div id="results" class="result-grid"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="./barnehage_data.js"></script>
+  <script src="./barnehage_live_data.js"></script>
+  <script src="./barnehage_app.js"></script>
+</body>
+</html>
