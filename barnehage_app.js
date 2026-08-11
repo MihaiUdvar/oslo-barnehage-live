@@ -35,6 +35,7 @@ const ui = {
   lblZip: document.getElementById("lbl-zip"),
   lblMode: document.getElementById("lbl-mode"),
   lblMin: document.getElementById("lbl-min"),
+  routePlannerLink: document.getElementById("routePlannerLink"),
   modeButtons: [...document.querySelectorAll(".seg button")],
   liveToggle: document.getElementById("liveToggle"),
   kMatch: document.getElementById("k-match"),
@@ -71,6 +72,7 @@ const I18N = {
     lastUpdated: "Sist oppdatert",
     liveLoading: "Henter...",
     liveError: "Kunne ikke hente data",
+    routePlanner: "Rute for besøk",
   },
   en: {
     title: "Oslo Kindergarten Finder (2026)",
@@ -97,6 +99,7 @@ const I18N = {
     lastUpdated: "Last updated",
     liveLoading: "Loading...",
     liveError: "Could not load data",
+    routePlanner: "Visit route",
   },
   fr: {
     title: "Recherche de crèches à Oslo (2026)",
@@ -123,6 +126,7 @@ const I18N = {
     lastUpdated: "Dernière mise à jour",
     liveLoading: "Chargement...",
     liveError: "Impossible de charger les données",
+    routePlanner: "Itinéraire de visite",
   },
   es: {
     title: "Buscador de guarderías en Oslo (2026)",
@@ -149,6 +153,7 @@ const I18N = {
     lastUpdated: "Última actualización",
     liveLoading: "Cargando...",
     liveError: "No se pudieron cargar los datos",
+    routePlanner: "Ruta de visitas",
   },
   ar: {
     title: "البحث عن حضانة في أوسلو (2026)",
@@ -175,6 +180,7 @@ const I18N = {
     lastUpdated: "آخر تحديث",
     liveLoading: "جارٍ التحميل...",
     liveError: "تعذر تحميل البيانات",
+    routePlanner: "مسار الزيارة",
   },
   ku: {
     title: "Pêşkêşkirina zaroktan a Osloyê (2026)",
@@ -201,6 +207,7 @@ const I18N = {
     lastUpdated: "Dawî nûkirin",
     liveLoading: "Tê barkirin...",
     liveError: "Dane nehatin barkirin",
+    routePlanner: "Rêya serdanê",
   },
   so: {
     title: "Raadinta dhismooyinka carruurta Oslo (2026)",
@@ -227,6 +234,7 @@ const I18N = {
     lastUpdated: "Markii ugu dambeysay la cusboonaysiiyay",
     liveLoading: "Waa la soo dejinayaa...",
     liveError: "Xogta lama soo dejin karin",
+    routePlanner: "Jidiga booqashada",
   },
   tr: {
     title: "Oslo Anaokulu Bulucu (2026)",
@@ -253,6 +261,7 @@ const I18N = {
     lastUpdated: "Son güncelleme",
     liveLoading: "Yükleniyor...",
     liveError: "Veriler yüklenemedi",
+    routePlanner: "Ziyaret rotası",
   },
   pl: {
     title: "Szukaj przedszkola w Oslo (2026)",
@@ -279,6 +288,7 @@ const I18N = {
     lastUpdated: "Ostatnia aktualizacja",
     liveLoading: "Ładowanie...",
     liveError: "Nie udało się załadować danych",
+    routePlanner: "Trasa wizyt",
   },
   vi: {
     title: "Tìm trường mẫu giáo ở Oslo (2026)",
@@ -305,6 +315,7 @@ const I18N = {
     lastUpdated: "Cập nhật lần cuối",
     liveLoading: "Đang tải...",
     liveError: "Không thể tải dữ liệu",
+    routePlanner: "Lộ trình thăm",
   },
   hi: {
     title: "ओस्लो में नर्सरी खोजें (2026)",
@@ -331,6 +342,7 @@ const I18N = {
     lastUpdated: "अंतिम अपडेट",
     liveLoading: "लोड हो रहा है...",
     liveError: "डेटा लोड नहीं हो सका",
+    routePlanner: "यात्रा मार्ग",
   },
   fa: {
     title: "یافتن مهدکودک در اسلو (2026)",
@@ -357,6 +369,7 @@ const I18N = {
     lastUpdated: "آخرین به‌روزرسانی",
     liveLoading: "در حال بارگذاری...",
     liveError: "بارگذاری داده‌ها ممکن نشد",
+    routePlanner: "مسیر بازدید",
   }
 };
 
@@ -472,6 +485,8 @@ function setLanguage() {
   ui.kLiten.textContent = t("sumLiten");
   ui.kStor.textContent = t("sumStor");
   ui.liveToggle.textContent = t("live");
+  ui.routePlannerLink.textContent = t("routePlanner");
+  ui.routePlannerLink.setAttribute("aria-label", t("routePlanner"));
 
   ui.modeButtons[0].textContent = t("both");
   ui.modeButtons[1].textContent = t("liten");

@@ -9,3 +9,6 @@ __pycache__/
 telemetry-id
 audit_*.py
 .vercel
+
+# Local Netlify folder
+.netlify
