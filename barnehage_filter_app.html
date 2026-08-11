@@ -240,6 +240,16 @@
       border-top: 1px solid #d7e6ec;
     }
 
+    .results-banner {
+      background: #eefaf8;
+      border: 1px solid #bfe3df;
+      color: #0d5f59;
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
     .result-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -444,6 +454,7 @@
           <div class="map-resizer" id="mapResizer" aria-label="Resize map" title="Drag to resize map"></div>
         </section>
         <section class="results">
+          <div id="resultsBanner" class="results-banner"></div>
           <div id="results" class="result-grid"></div>
         </section>
       </main>

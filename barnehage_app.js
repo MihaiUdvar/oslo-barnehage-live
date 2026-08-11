@@ -36,6 +36,7 @@ const ui = {
   lblMode: document.getElementById("lbl-mode"),
   lblMin: document.getElementById("lbl-min"),
   routePlannerLink: document.getElementById("routePlannerLink"),
+  resultsBanner: document.getElementById("resultsBanner"),
   modeButtons: [...document.querySelectorAll(".seg button")],
   liveToggle: document.getElementById("liveToggle"),
   kMatch: document.getElementById("k-match"),
@@ -73,6 +74,7 @@ const I18N = {
     liveLoading: "Henter...",
     liveError: "Kunne ikke hente data",
     routePlanner: "Rute for besøk",
+    onlyWithSpots: "Kun barnehager med ledige plasser vises nedenfor.",
   },
   en: {
     title: "Oslo Kindergarten Finder (2026)",
@@ -100,6 +102,7 @@ const I18N = {
     liveLoading: "Loading...",
     liveError: "Could not load data",
     routePlanner: "Visit route",
+    onlyWithSpots: "Only kindergartens with available spots are shown below.",
   },
   fr: {
     title: "Recherche de crèches à Oslo (2026)",
@@ -127,6 +130,7 @@ const I18N = {
     liveLoading: "Chargement...",
     liveError: "Impossible de charger les données",
     routePlanner: "Itinéraire de visite",
+    onlyWithSpots: "Seules les crèches avec des places disponibles sont affichées ci-dessous.",
   },
   es: {
     title: "Buscador de guarderías en Oslo (2026)",
@@ -154,6 +158,7 @@ const I18N = {
     liveLoading: "Cargando...",
     liveError: "No se pudieron cargar los datos",
     routePlanner: "Ruta de visitas",
+    onlyWithSpots: "Solo se muestran las guarderías con plazas disponibles.",
   },
   ar: {
     title: "البحث عن حضانة في أوسلو (2026)",
@@ -181,6 +186,7 @@ const I18N = {
     liveLoading: "جارٍ التحميل...",
     liveError: "تعذر تحميل البيانات",
     routePlanner: "مسار الزيارة",
+    onlyWithSpots: "تُعرض أدناه فقط الحضانات التي تتوفر فيها أماكن.",
   },
   ku: {
     title: "Pêşkêşkirina zaroktan a Osloyê (2026)",
@@ -208,6 +214,7 @@ const I18N = {
     liveLoading: "Tê barkirin...",
     liveError: "Dane nehatin barkirin",
     routePlanner: "Rêya serdanê",
+    onlyWithSpots: "Tenê zarokxaneyên bi cihên vala li jêr têne nîşandan.",
   },
   so: {
     title: "Raadinta dhismooyinka carruurta Oslo (2026)",
@@ -235,6 +242,7 @@ const I18N = {
     liveLoading: "Waa la soo dejinayaa...",
     liveError: "Xogta lama soo dejin karin",
     routePlanner: "Jidiga booqashada",
+    onlyWithSpots: "Kaliya xannaanooyinka leh boosas bannaan ayaa hoos lagu muujiyaa.",
   },
   tr: {
     title: "Oslo Anaokulu Bulucu (2026)",
@@ -262,6 +270,7 @@ const I18N = {
     liveLoading: "Yükleniyor...",
     liveError: "Veriler yüklenemedi",
     routePlanner: "Ziyaret rotası",
+    onlyWithSpots: "Aşağıda yalnızca boş yeri olan anaokulları gösterilir.",
   },
   pl: {
     title: "Szukaj przedszkola w Oslo (2026)",
@@ -289,6 +298,7 @@ const I18N = {
     liveLoading: "Ładowanie...",
     liveError: "Nie udało się załadować danych",
     routePlanner: "Trasa wizyt",
+    onlyWithSpots: "Poniżej wyświetlane są tylko przedszkola z wolnymi miejscami.",
   },
   vi: {
     title: "Tìm trường mẫu giáo ở Oslo (2026)",
@@ -316,6 +326,7 @@ const I18N = {
     liveLoading: "Đang tải...",
     liveError: "Không thể tải dữ liệu",
     routePlanner: "Lộ trình thăm",
+    onlyWithSpots: "Chỉ hiển thị các trường mẫu giáo còn chỗ trống bên dưới.",
   },
   hi: {
     title: "ओस्लो में नर्सरी खोजें (2026)",
@@ -343,6 +354,7 @@ const I18N = {
     liveLoading: "लोड हो रहा है...",
     liveError: "डेटा लोड नहीं हो सका",
     routePlanner: "यात्रा मार्ग",
+    onlyWithSpots: "नीचे केवल उपलब्ध स्थान वाली नर्सरी दिखाई जाती हैं।",
   },
   fa: {
     title: "یافتن مهدکودک در اسلو (2026)",
@@ -370,6 +382,7 @@ const I18N = {
     liveLoading: "در حال بارگذاری...",
     liveError: "بارگذاری داده‌ها ممکن نشد",
     routePlanner: "مسیر بازدید",
+    onlyWithSpots: "در زیر فقط مهدکودک‌هایی با جای خالی نمایش داده می‌شوند.",
   }
 };
 
@@ -487,6 +500,7 @@ function setLanguage() {
   ui.liveToggle.textContent = t("live");
   ui.routePlannerLink.textContent = t("routePlanner");
   ui.routePlannerLink.setAttribute("aria-label", t("routePlanner"));
+  ui.resultsBanner.textContent = t("onlyWithSpots");
 
   ui.modeButtons[0].textContent = t("both");
   ui.modeButtons[1].textContent = t("liten");
