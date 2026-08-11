@@ -175,6 +175,16 @@
       display: none;
     }
 
+    .route-info {
+      background: #eefaf8;
+      border: 1px solid #bfe3df;
+      color: #0d5f59;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      display: none;
+    }
+
     .live-status {
       font-size: 13px;
       color: var(--muted);
@@ -362,9 +372,11 @@
         <div class="planner-actions">
           <button id="buildBtn" class="btn-action" type="button">Lag rute</button>
           <button id="clearBtn" class="btn-action btn-secondary" type="button">Fjern rute</button>
+          <button id="shareBtn" class="btn-action btn-secondary" type="button" style="display:none">Del rute</button>
         </div>
         <div id="routeError" class="route-error"></div>
         <div id="routeWarning" class="route-warning"></div>
+        <div id="routeInfo" class="route-info"></div>
         <div id="savedRoutes" class="saved-routes" style="display:none">
           <div class="saved-routes-title">Lagrede ruter</div>
           <div id="savedRoutesList" class="saved-routes-list"></div>

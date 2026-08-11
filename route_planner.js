@@ -3,8 +3,10 @@ const ui = {
   bydelSelect: document.getElementById("bydelSelect"),
   buildBtn: document.getElementById("buildBtn"),
   clearBtn: document.getElementById("clearBtn"),
+  shareBtn: document.getElementById("shareBtn"),
   routeError: document.getElementById("routeError"),
   routeWarning: document.getElementById("routeWarning"),
+  routeInfo: document.getElementById("routeInfo"),
   liveStatus: document.getElementById("liveStatus"),
   savedRoutes: document.getElementById("savedRoutes"),
   savedRoutesList: document.getElementById("savedRoutesList"),
@@ -14,6 +16,7 @@ const ui = {
 
 let allRows = [];
 let rowByKey = new Map();
+let rowIndexByKey = new Map();
 let liveByUrl = new Map();
 let liveDates = new Map();
 let liveAvailable = false;
@@ -143,16 +146,27 @@ function buildLinkHtml(row) {
   return html;
 }
 
+// Distance label per display mode. Tour modes measure each leg from the previous
+// stop; legacy "fromStart" modes (older saved routes) measure from the start point.
+function distanceLabelFor(mode, orderIndex, distanceKm) {
+  const km = distanceKm.toFixed(1);
+  const from = orderIndex === 0 ? "fra startpunkt" : "fra forrige stopp";
+  switch (mode) {
+    case "tour-walk": return `${km} km ${from} (gange via vei)`;
+    case "tour-air": return `${km} km ${from} (luftlinje)`;
+    case "fromStart-walk": return `${km} km gangavstand`;
+    default: return `${km} km luftlinje fra startpunkt`;
+  }
+}
+
 // Same card markup as the main app's result list, plus a route order badge and distance line.
 // Cards with no currently-announced live spots get a light red background instead of
 // falling back to expected (PDF) capacity numbers.
-function buildCardHtml(row, orderIndex, distanceKm, isWalking) {
+function buildCardHtml(row, orderIndex, distanceKm, mode) {
   const link = buildLinkHtml(row);
   const s = liveSpotsFor(row);
   const addressHtml = buildAddressHtml(row) || "-";
-  const distanceLabel = isWalking
-    ? `${distanceKm.toFixed(1)} km gangavstand (via vei)`
-    : `${distanceKm.toFixed(1)} km luftlinje fra startpunkt`;
+  const distanceLabel = distanceLabelFor(mode, orderIndex, distanceKm);
   const updated = liveUpdatedText(row);
   const updatedHtml = updated ? `<div class="meta live-updated">${escapeHtml(updated)}</div>` : "";
   const spotsChips = s
@@ -189,31 +203,60 @@ function isValidLatLon(lat, lon) {
 
 // Public OSRM demo server: no API key, but it only actually hosts a road/driving
 // network, so a requested "foot" profile falls back to the same road distances.
-// Good enough as an on-road approximation; haversineKm() below is the fallback
-// if the demo server is unreachable or rate-limits us.
-const OSRM_TABLE_URL = "https://router.project-osrm.org/table/v1/foot/";
+// The /trip service solves the visiting-order problem (open TSP from a fixed
+// start), which is what a one-bydel-per-day visit plan actually needs.
+// greedyAirTour() below is the fallback if the demo server is unreachable.
+const OSRM_TRIP_URL = "https://router.project-osrm.org/trip/v1/foot/";
 
-async function fetchRoadDistancesKm(point, destinations) {
-  if (!destinations.length) return [];
-  const coords = [point, ...destinations].map(p => `${p.lon},${p.lat}`).join(";");
-  const url = `${OSRM_TABLE_URL}${coords}?sources=0&annotations=distance`;
+// Returns candidates in optimized visit order, each with `dist` = km from the
+// previous stop (the first from the start point). Null if OSRM is unavailable.
+async function fetchWalkingTour(point, candidates) {
+  if (!candidates.length) return [];
+  const coords = [point, ...candidates].map(p => `${p.lon},${p.lat}`).join(";");
+  const url = `${OSRM_TRIP_URL}${coords}?source=first&roundtrip=false`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     const data = await res.json();
-    if (data.code !== "Ok" || !Array.isArray(data.distances) || !data.distances[0]) return null;
-    const metersToDestinations = data.distances[0].slice(1);
-    if (metersToDestinations.length !== destinations.length) return null;
-    if (metersToDestinations.some(m => typeof m !== "number")) return null;
-    return metersToDestinations.map(m => m / 1000);
+    if (data.code !== "Ok" || !Array.isArray(data.trips) || !data.trips[0] || !Array.isArray(data.waypoints)) return null;
+    if (data.waypoints.length !== candidates.length + 1) return null;
+
+    // waypoints[i].waypoint_index = position of input coordinate i in the trip;
+    // trips[0].legs[k] = leg from trip position k to k+1.
+    const legsKm = data.trips[0].legs.map(l => l.distance / 1000);
+    const ordered = candidates
+      .map((item, i) => ({ ...item, tourPos: data.waypoints[i + 1].waypoint_index }))
+      .sort((a, b) => a.tourPos - b.tourPos)
+      .map(item => ({ ...item, dist: legsKm[item.tourPos - 1] }));
+    if (ordered.some(it => !Number.isFinite(it.dist))) return null;
+    return ordered;
   } catch {
     return null;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+// Offline fallback: greedy nearest-neighbor tour on straight-line distances.
+function greedyAirTour(point, candidates) {
+  const remaining = [...candidates];
+  const ordered = [];
+  let cur = point;
+  while (remaining.length) {
+    let bestIdx = 0;
+    let bestD = Infinity;
+    remaining.forEach((c, i) => {
+      const d = haversineKm(cur.lat, cur.lon, c.lat, c.lon);
+      if (d < bestD) { bestD = d; bestIdx = i; }
+    });
+    const next = remaining.splice(bestIdx, 1)[0];
+    ordered.push({ ...next, dist: bestD });
+    cur = next;
+  }
+  return ordered;
 }
 
 // Accepts a full Google Maps URL (place pin, map center, or q=/ll= search link) or a plain "lat,lng" pair.
@@ -254,6 +297,15 @@ function hideWarning() {
   ui.routeWarning.style.display = "none";
 }
 
+function showInfo(message) {
+  ui.routeInfo.textContent = message;
+  ui.routeInfo.style.display = "block";
+}
+
+function hideInfo() {
+  ui.routeInfo.style.display = "none";
+}
+
 function loadBydeler(rows) {
   const bydeler = [...new Set(rows.map(r => r.bydel).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   for (const b of bydeler) {
@@ -264,16 +316,26 @@ function loadBydeler(rows) {
   }
 }
 
-function renderResults(items, bydel, isWalking) {
+function renderResults(items, bydel, mode) {
   ui.resultsHeading.style.display = "block";
-  const sortLabel = isWalking ? "gangavstand" : "luftlinjeavstand";
-  ui.resultsHeading.textContent = `${items.length} barnehager i ${bydel}, sortert etter ${sortLabel}`;
+  ui.shareBtn.style.display = items.length ? "inline-block" : "none";
 
   if (!items.length) {
+    ui.resultsHeading.textContent = `0 barnehager i ${bydel}`;
     ui.results.innerHTML = `<div class="empty">Fant ingen barnehager med kjent posisjon i denne bydelen.</div>`;
     return;
   }
-  ui.results.innerHTML = items.map((item, idx) => buildCardHtml(item.row, idx, item.dist, isWalking)).join("");
+
+  if (mode === "tour-walk" || mode === "tour-air") {
+    const totalKm = items.reduce((s, it) => s + it.dist, 0);
+    const how = mode === "tour-walk" ? "gange via vei" : "luftlinje";
+    ui.resultsHeading.textContent = `${items.length} barnehager i ${bydel} i besøksrekkefølge – total rute ${totalKm.toFixed(1)} km (${how})`;
+  } else {
+    const sortLabel = mode === "fromStart-walk" ? "gangavstand" : "luftlinjeavstand";
+    ui.resultsHeading.textContent = `${items.length} barnehager i ${bydel}, sortert etter ${sortLabel}`;
+  }
+
+  ui.results.innerHTML = items.map((item, idx) => buildCardHtml(item.row, idx, item.dist, mode)).join("");
 }
 
 // --- Saved routes (localStorage) ---------------------------------------------
@@ -310,11 +372,11 @@ function persistStore(store) {
   }
 }
 
-function saveRoute(bydel, startText, isWalking, items) {
+function saveRoute(bydel, startText, mode, items) {
   const store = loadStore();
   store.routes[bydel] = {
     startText,
-    isWalking,
+    mode,
     savedAt: new Date().toISOString(),
     items: items.map(it => ({ key: routeKey(it.row), dist: it.dist }))
   };
@@ -354,7 +416,9 @@ function restoreRoute(bydel) {
   }
   hideError();
   hideWarning();
-  renderResults(items, bydel, !!saved.isWalking);
+  // Routes saved before tour ordering carry isWalking instead of mode.
+  const mode = saved.mode || (saved.isWalking ? "fromStart-walk" : "fromStart-air");
+  renderResults(items, bydel, mode);
   renderSavedRoutes();
   return true;
 }
@@ -379,6 +443,125 @@ function renderSavedRoutes() {
       </span>
     `;
   }).join("");
+}
+
+// --- Shareable route URLs ------------------------------------------------------
+// The displayed route is encoded into the URL hash so one parent can build it and
+// send the link to the other. Rows are referenced by their index in the dataset
+// (compact), so a link is only valid against the same deployed dataset — if the
+// data has been regenerated since, the import fails loudly instead of showing
+// wrong barnehager, and the receiver asks for a fresh link.
+function base64UrlEncode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(str) {
+  let s = str.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function buildShareUrl() {
+  const store = loadStore();
+  const bydel = store.lastBydel;
+  const saved = bydel ? store.routes[bydel] : null;
+  if (!saved || !Array.isArray(saved.items) || !saved.items.length) return null;
+
+  const x = [];
+  const d = [];
+  for (const it of saved.items) {
+    const idx = rowIndexByKey.get(it.key);
+    if (idx == null || !Number.isFinite(it.dist)) return null;
+    x.push(idx);
+    d.push(Math.round(it.dist * 100) / 100);
+  }
+  const payload = {
+    v: 1,
+    b: bydel,
+    m: saved.mode || "tour-walk",
+    t: (saved.startText || "").slice(0, 300),
+    x,
+    d
+  };
+  return `${location.origin}${location.pathname}#r=${base64UrlEncode(JSON.stringify(payload))}`;
+}
+
+async function shareRoute() {
+  hideError();
+  const url = buildShareUrl();
+  if (!url) {
+    showError("Ingen rute å dele ennå. Lag en rute først.");
+    return;
+  }
+
+  // Native share sheet on mobile; clipboard on desktop; prompt as last resort.
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "Barnehagerute", url });
+      return;
+    } catch {
+      // User cancelled or share failed — fall through to clipboard.
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    const original = ui.shareBtn.textContent;
+    ui.shareBtn.textContent = "Lenke kopiert!";
+    setTimeout(() => { ui.shareBtn.textContent = original; }, 2000);
+  } catch {
+    window.prompt("Kopier lenken:", url);
+  }
+}
+
+const VALID_MODES = new Set(["tour-walk", "tour-air", "fromStart-walk", "fromStart-air"]);
+
+// Import a route from the URL hash. Returns true if a route was shown.
+function importRouteFromHash() {
+  const m = (location.hash || "").match(/[#&]r=([A-Za-z0-9_-]+)/);
+  if (!m) return false;
+
+  let payload;
+  try {
+    payload = JSON.parse(base64UrlDecode(m[1]));
+  } catch {
+    showError("Den delte lenken kunne ikke leses.");
+    return false;
+  }
+
+  const ok = payload && payload.v === 1 &&
+    typeof payload.b === "string" && payload.b &&
+    Array.isArray(payload.x) && Array.isArray(payload.d) &&
+    payload.x.length > 0 && payload.x.length === payload.d.length;
+  if (!ok) {
+    showError("Den delte lenken kunne ikke leses.");
+    return false;
+  }
+
+  const items = payload.x.map((idx, i) => {
+    const row = Number.isInteger(idx) ? allRows[idx] : null;
+    const dist = Number(payload.d[i]);
+    return row && row.bydel === payload.b && Number.isFinite(dist) ? { row, dist } : null;
+  });
+  if (items.some(it => !it)) {
+    showError("Den delte ruten passer ikke med dagens data – be om en ny lenke.");
+    return false;
+  }
+
+  const mode = VALID_MODES.has(payload.m) ? payload.m : "tour-walk";
+  ui.startPoint.value = payload.t || "";
+  ui.bydelSelect.value = payload.b;
+  renderResults(items, payload.b, mode);
+  saveRoute(payload.b, payload.t || "", mode, items);
+
+  // Drop the hash so a reload doesn't re-import over later changes.
+  history.replaceState(null, "", location.pathname + location.search);
+  showInfo(`Delt rute for ${payload.b} er importert og lagret på denne enheten.`);
+  return true;
 }
 
 const SHORT_LINK_HOSTS = new Set(["maps.app.goo.gl", "goo.gl"]);
@@ -420,6 +603,7 @@ async function resolveStartPoint(text) {
 async function buildRoute() {
   hideError();
   hideWarning();
+  hideInfo();
   const bydel = ui.bydelSelect.value;
 
   ui.buildBtn.disabled = true;
@@ -455,39 +639,37 @@ async function buildRoute() {
     .map(row => ({ row, lat: Number(row.latitude), lon: Number(row.longitude) }))
     .filter(item => isValidLatLon(item.lat, item.lon));
 
-  ui.buildBtn.textContent = "Beregner avstander...";
-  const roadDistancesKm = await fetchRoadDistancesKm(point, candidates);
+  ui.buildBtn.textContent = "Beregner rute...";
+  const tour = await fetchWalkingTour(point, candidates);
   ui.buildBtn.disabled = false;
   ui.buildBtn.textContent = originalLabel;
 
   let items;
-  let isWalking;
-  if (roadDistancesKm) {
-    items = candidates
-      .map((item, i) => ({ ...item, dist: roadDistancesKm[i] }))
-      .sort((a, b) => a.dist - b.dist);
-    isWalking = true;
+  let mode;
+  if (tour) {
+    items = tour;
+    mode = "tour-walk";
   } else {
-    items = candidates
-      .map(item => ({ ...item, dist: haversineKm(point.lat, point.lon, item.lat, item.lon) }))
-      .sort((a, b) => a.dist - b.dist);
-    isWalking = false;
+    items = greedyAirTour(point, candidates);
+    mode = "tour-air";
     if (candidates.length) {
-      showWarning("Kunne ikke hente gangavstand via kart akkurat nå. Viser luftlinjeavstand i stedet.");
+      showWarning("Kunne ikke beregne gangrute via kart akkurat nå. Viser besøksrekkefølge basert på luftlinje i stedet.");
     }
   }
 
-  renderResults(items, bydel, isWalking);
-  saveRoute(bydel, ui.startPoint.value.trim(), isWalking, items);
+  renderResults(items, bydel, mode);
+  saveRoute(bydel, ui.startPoint.value.trim(), mode, items);
 }
 
 function clearRoute() {
   hideError();
   hideWarning();
+  hideInfo();
   const bydel = ui.bydelSelect.value;
   if (bydel) deleteRoute(bydel);
   ui.resultsHeading.style.display = "none";
   ui.results.innerHTML = "";
+  ui.shareBtn.style.display = "none";
 }
 
 async function init() {
@@ -499,9 +681,12 @@ async function init() {
   loadBydeler(allRows);
 
   rowByKey = new Map();
-  for (const row of allRows) {
-    rowByKey.set(routeKey(row), row);
-  }
+  rowIndexByKey = new Map();
+  allRows.forEach((row, i) => {
+    const key = routeKey(row);
+    rowByKey.set(key, row);
+    rowIndexByKey.set(key, i);
+  });
 
   ui.liveStatus.textContent = "Henter sanntidsdata...";
   let liveError = null;
@@ -524,26 +709,31 @@ async function init() {
 
   ui.buildBtn.addEventListener("click", buildRoute);
   ui.clearBtn.addEventListener("click", clearRoute);
+  ui.shareBtn.addEventListener("click", shareRoute);
 
   // Saved-routes bar: load or delete via event delegation (CSP blocks inline handlers).
   ui.savedRoutesList.addEventListener("click", (event) => {
     const loadBtn = event.target.closest(".saved-route-load");
-    if (loadBtn) { restoreRoute(loadBtn.dataset.bydel); return; }
+    if (loadBtn) { hideInfo(); restoreRoute(loadBtn.dataset.bydel); return; }
     const deleteBtn = event.target.closest(".saved-route-delete");
     if (deleteBtn) {
       deleteRoute(deleteBtn.dataset.bydel);
       if (ui.bydelSelect.value === deleteBtn.dataset.bydel) {
         ui.resultsHeading.style.display = "none";
         ui.results.innerHTML = "";
+        ui.shareBtn.style.display = "none";
       }
     }
   });
 
   renderSavedRoutes();
 
-  // Bring back the route the user was working with before closing the browser.
-  const store = loadStore();
-  if (store.lastBydel) restoreRoute(store.lastBydel);
+  // A shared link takes precedence; otherwise bring back the route the user
+  // was working with before closing the browser.
+  if (!importRouteFromHash()) {
+    const store = loadStore();
+    if (store.lastBydel) restoreRoute(store.lastBydel);
+  }
 }
 
 init();
