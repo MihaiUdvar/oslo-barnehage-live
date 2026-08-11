@@ -2,7 +2,6 @@ const ui = {
   startPoint: document.getElementById("startPoint"),
   bydelSelect: document.getElementById("bydelSelect"),
   buildBtn: document.getElementById("buildBtn"),
-  clearBtn: document.getElementById("clearBtn"),
   shareBtn: document.getElementById("shareBtn"),
   routeError: document.getElementById("routeError"),
   routeWarning: document.getElementById("routeWarning"),
@@ -661,17 +660,6 @@ async function buildRoute() {
   saveRoute(bydel, ui.startPoint.value.trim(), mode, items);
 }
 
-function clearRoute() {
-  hideError();
-  hideWarning();
-  hideInfo();
-  const bydel = ui.bydelSelect.value;
-  if (bydel) deleteRoute(bydel);
-  ui.resultsHeading.style.display = "none";
-  ui.results.innerHTML = "";
-  ui.shareBtn.style.display = "none";
-}
-
 async function init() {
   allRows = await loadRows();
   if (!Array.isArray(allRows) || !allRows.length) {
@@ -708,7 +696,6 @@ async function init() {
   }
 
   ui.buildBtn.addEventListener("click", buildRoute);
-  ui.clearBtn.addEventListener("click", clearRoute);
   ui.shareBtn.addEventListener("click", shareRoute);
 
   // Saved-routes bar: load or delete via event delegation (CSP blocks inline handlers).
