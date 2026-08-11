@@ -10,6 +10,7 @@ const ui = {
   savedRoutes: document.getElementById("savedRoutes"),
   savedRoutesList: document.getElementById("savedRoutesList"),
   resultsHeading: document.getElementById("resultsHeading"),
+  mapsExport: document.getElementById("mapsExport"),
   results: document.getElementById("results")
 };
 
@@ -171,8 +172,12 @@ function buildCardHtml(row, orderIndex, distanceKm, mode) {
   const spotsChips = s
     ? `<span class="chip">Liten: ${escapeHtml(String(s.liten))}</span><span class="chip">Stor: ${escapeHtml(String(s.stor))}</span>`
     : `<span class="chip chip-no-live">Ingen ledige plasser oppgitt</span>`;
+
+  const key = routeKey(row);
+  const note = notesCache[key] || {};
+
   return `
-    <article class="card${s ? "" : " card-no-live"}">
+    <article class="card${s ? "" : " card-no-live"}" data-key="${escapeHtml(key)}">
       <h3>${escapeHtml(row.barnehage)}</h3>
       <div class="chips">
         <span class="chip chip-order">#${orderIndex + 1}</span>
@@ -183,6 +188,9 @@ function buildCardHtml(row, orderIndex, distanceKm, mode) {
       ${updatedHtml}
       <div class="meta">Adresse: ${addressHtml}</div>
       <div>${link}</div>
+      <div class="note-row">
+        <textarea class="note-input" rows="2" placeholder="Notat etter besøk...">${escapeHtml(note.note || "")}</textarea>
+      </div>
     </article>
   `;
 }
@@ -315,12 +323,14 @@ function loadBydeler(rows) {
   }
 }
 
-function renderResults(items, bydel, mode) {
+function renderResults(items, bydel, mode, startPoint) {
   ui.resultsHeading.style.display = "block";
   ui.shareBtn.style.display = items.length ? "inline-block" : "none";
 
   if (!items.length) {
     ui.resultsHeading.textContent = `0 barnehager i ${bydel}`;
+    ui.mapsExport.style.display = "none";
+    ui.mapsExport.innerHTML = "";
     ui.results.innerHTML = `<div class="empty">Fant ingen barnehager med kjent posisjon i denne bydelen.</div>`;
     return;
   }
@@ -334,7 +344,77 @@ function renderResults(items, bydel, mode) {
     ui.resultsHeading.textContent = `${items.length} barnehager i ${bydel}, sortert etter ${sortLabel}`;
   }
 
+  const mapsLinks = buildGoogleMapsLinks(items, startPoint || null);
+  ui.mapsExport.innerHTML = mapsLinks
+    .map(l => `<a class="btn" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.label)}</a>`)
+    .join("");
+  ui.mapsExport.style.display = "flex";
+
+  notesCache = loadNotes();
   ui.results.innerHTML = items.map((item, idx) => buildCardHtml(item.row, idx, item.dist, mode)).join("");
+}
+
+// --- Field notes per barnehage (localStorage) ----------------------------------
+// Keyed by barnehage identity (routeKey), NOT by route: a note like "ask for
+// Kari" belongs to the place and must survive routes being rebuilt or deleted.
+// Per-device only — no backend, works offline.
+const NOTES_KEY = "barnehage_notes_v1";
+let notesCache = {};
+
+function loadNotes() {
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    const notes = raw ? JSON.parse(raw) : null;
+    if (notes && typeof notes === "object") return notes;
+  } catch {
+    // Corrupt JSON or storage unavailable — start fresh.
+  }
+  return {};
+}
+
+function persistNotes(notes) {
+  // Prune empty entries so abandoned notes don't accumulate forever.
+  for (const [key, val] of Object.entries(notes)) {
+    if (!val || (!val.rating && !val.note)) delete notes[key];
+  }
+  try {
+    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  } catch {
+    // Storage full or unavailable; the note still works for this session.
+  }
+}
+
+// --- Google Maps export ---------------------------------------------------------
+// One directions link per segment of 10 stops (Maps' URL API caps waypoints at 9;
+// origin + 9 waypoints + destination = 10 new stops per link). Each segment starts
+// where the previous one ended, so the links chain into the full day tour.
+function itemCoord(item) {
+  const lat = Number(item.row.latitude);
+  const lon = Number(item.row.longitude);
+  return `${lat.toFixed(6)},${lon.toFixed(6)}`;
+}
+
+function buildGoogleMapsLinks(items, startPoint) {
+  const links = [];
+  const STOPS_PER_LINK = 10;
+  for (let i = 0; i < items.length; i += STOPS_PER_LINK) {
+    const chunk = items.slice(i, i + STOPS_PER_LINK);
+    const destination = itemCoord(chunk[chunk.length - 1]);
+    const waypoints = chunk.slice(0, -1).map(itemCoord).join("|");
+    const origin = i === 0
+      ? (startPoint && isValidLatLon(startPoint.lat, startPoint.lon) ? `${startPoint.lat.toFixed(6)},${startPoint.lon.toFixed(6)}` : null)
+      : itemCoord(items[i - 1]);
+
+    const params = new URLSearchParams({ api: "1", destination, travelmode: "walking" });
+    if (origin) params.set("origin", origin);
+    if (waypoints) params.set("waypoints", waypoints);
+
+    const label = items.length <= STOPS_PER_LINK
+      ? "Åpne ruten i Google Maps"
+      : `Google Maps del ${links.length + 1} (stopp ${i + 1}–${i + chunk.length})`;
+    links.push({ label, url: `https://www.google.com/maps/dir/?${params.toString()}` });
+  }
+  return links;
 }
 
 // --- Saved routes (localStorage) ---------------------------------------------
@@ -371,11 +451,12 @@ function persistStore(store) {
   }
 }
 
-function saveRoute(bydel, startText, mode, items) {
+function saveRoute(bydel, startText, mode, items, point) {
   const store = loadStore();
   store.routes[bydel] = {
     startText,
     mode,
+    point: point && isValidLatLon(point.lat, point.lon) ? { lat: point.lat, lon: point.lon } : null,
     savedAt: new Date().toISOString(),
     items: items.map(it => ({ key: routeKey(it.row), dist: it.dist }))
   };
@@ -417,7 +498,11 @@ function restoreRoute(bydel) {
   hideWarning();
   // Routes saved before tour ordering carry isWalking instead of mode.
   const mode = saved.mode || (saved.isWalking ? "fromStart-walk" : "fromStart-air");
-  renderResults(items, bydel, mode);
+  // Older saved routes lack point; the start text may still be parseable locally.
+  const point = saved.point && isValidLatLon(saved.point.lat, saved.point.lon)
+    ? saved.point
+    : parseStartPoint(saved.startText);
+  renderResults(items, bydel, mode, point);
   renderSavedRoutes();
   return true;
 }
@@ -487,6 +572,9 @@ function buildShareUrl() {
     x,
     d
   };
+  if (saved.point && isValidLatLon(saved.point.lat, saved.point.lon)) {
+    payload.s = [Math.round(saved.point.lat * 1e6) / 1e6, Math.round(saved.point.lon * 1e6) / 1e6];
+  }
   return `${location.origin}${location.pathname}#r=${base64UrlEncode(JSON.stringify(payload))}`;
 }
 
@@ -552,10 +640,13 @@ function importRouteFromHash() {
   }
 
   const mode = VALID_MODES.has(payload.m) ? payload.m : "tour-walk";
+  const point = Array.isArray(payload.s) && isValidLatLon(Number(payload.s[0]), Number(payload.s[1]))
+    ? { lat: Number(payload.s[0]), lon: Number(payload.s[1]) }
+    : null;
   ui.startPoint.value = payload.t || "";
   ui.bydelSelect.value = payload.b;
-  renderResults(items, payload.b, mode);
-  saveRoute(payload.b, payload.t || "", mode, items);
+  renderResults(items, payload.b, mode, point);
+  saveRoute(payload.b, payload.t || "", mode, items, point);
 
   // Drop the hash so a reload doesn't re-import over later changes.
   history.replaceState(null, "", location.pathname + location.search);
@@ -656,8 +747,8 @@ async function buildRoute() {
     }
   }
 
-  renderResults(items, bydel, mode);
-  saveRoute(bydel, ui.startPoint.value.trim(), mode, items);
+  renderResults(items, bydel, mode, point);
+  saveRoute(bydel, ui.startPoint.value.trim(), mode, items, point);
 }
 
 async function init() {
@@ -709,8 +800,21 @@ async function init() {
         ui.resultsHeading.style.display = "none";
         ui.results.innerHTML = "";
         ui.shareBtn.style.display = "none";
+        ui.mapsExport.style.display = "none";
+        ui.mapsExport.innerHTML = "";
       }
     }
+  });
+
+  // Field notes: autosave the note text via delegation so re-renders don't lose handlers.
+  ui.results.addEventListener("input", (event) => {
+    if (!event.target.classList || !event.target.classList.contains("note-input")) return;
+    const card = event.target.closest("article[data-key]");
+    if (!card) return;
+    const key = card.dataset.key;
+    const cur = notesCache[key] || {};
+    notesCache[key] = { ...cur, note: event.target.value.slice(0, 2000), updatedAt: new Date().toISOString() };
+    persistNotes(notesCache);
   });
 
   renderSavedRoutes();

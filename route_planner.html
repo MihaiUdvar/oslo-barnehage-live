@@ -251,6 +251,30 @@
       color: #0f3b49;
     }
 
+    .maps-export {
+      display: none;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .note-row {
+      display: grid;
+      gap: 6px;
+      border-top: 1px dashed #e2ecf0;
+      padding-top: 8px;
+    }
+
+    .note-input {
+      width: 100%;
+      border: 1px solid #cddde3;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
     .result-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -383,6 +407,7 @@
       </div>
 
       <div id="resultsHeading" class="results-heading" style="display:none"></div>
+      <div id="mapsExport" class="maps-export"></div>
       <div id="results" class="result-grid"></div>
     </div>
   </div>
