@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- CSP restricts all content sources to trusted origins only. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://router.project-osrm.org;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://router.project-osrm.org https://ws.geonorge.no;" />
   <title>Rute for besøk – Oslo Barnehage Finder</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -132,6 +132,28 @@
       gap: 10px;
       flex-wrap: wrap;
     }
+
+    .startpoint-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .startpoint-row input { flex: 1; min-width: 0; }
+
+    .geo-btn {
+      border: 1px solid #cddde3;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: #1f3b48;
+      white-space: nowrap;
+      transition: .2s ease;
+    }
+    .geo-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .geo-btn:disabled { opacity: .6; cursor: wait; }
 
     .btn-action {
       border: 1px solid var(--accent);
@@ -386,7 +408,10 @@
         <div class="planner-grid">
           <div class="field">
             <label for="startPoint">Startpunkt</label>
-            <input id="startPoint" type="text" placeholder="Google Maps-lenke (også forkortet) eller lat,lng" />
+            <div class="startpoint-row">
+              <input id="startPoint" type="text" placeholder="Adresse, Google Maps-lenke eller lat,lng" />
+              <button id="geoBtn" class="geo-btn" type="button" title="Bruk min posisjon">📍 Min posisjon</button>
+            </div>
           </div>
           <div class="field">
             <label for="bydelSelect">Bydel</label>

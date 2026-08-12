@@ -70,6 +70,7 @@ const I18N = {
     address: "Adresse",
     bydelLbl: "Bydel",
     live: "Ledige plasser nå",
+    phone: "Telefon",
     lastUpdated: "Sist oppdatert",
     liveLoading: "Henter...",
     liveError: "Kunne ikke hente data",
@@ -98,6 +99,7 @@ const I18N = {
     address: "Address",
     bydelLbl: "District",
     live: "Available spots now",
+    phone: "Phone",
     lastUpdated: "Last updated",
     liveLoading: "Loading...",
     liveError: "Could not load data",
@@ -126,6 +128,7 @@ const I18N = {
     address: "Adresse",
     bydelLbl: "District",
     live: "Places disponibles maintenant",
+    phone: "Téléphone",
     lastUpdated: "Dernière mise à jour",
     liveLoading: "Chargement...",
     liveError: "Impossible de charger les données",
@@ -154,6 +157,7 @@ const I18N = {
     address: "Dirección",
     bydelLbl: "Distrito",
     live: "Plazas disponibles ahora",
+    phone: "Teléfono",
     lastUpdated: "Última actualización",
     liveLoading: "Cargando...",
     liveError: "No se pudieron cargar los datos",
@@ -182,6 +186,7 @@ const I18N = {
     address: "العنوان",
     bydelLbl: "المنطقة",
     live: "الأماكن المتاحة الآن",
+    phone: "الهاتف",
     lastUpdated: "آخر تحديث",
     liveLoading: "جارٍ التحميل...",
     liveError: "تعذر تحميل البيانات",
@@ -210,6 +215,7 @@ const I18N = {
     address: "Navnîşan",
     bydelLbl: "Tax",
     live: "Cihên vala niha",
+    phone: "Telefon",
     lastUpdated: "Dawî nûkirin",
     liveLoading: "Tê barkirin...",
     liveError: "Dane nehatin barkirin",
@@ -238,6 +244,7 @@ const I18N = {
     address: "Ciwaanka",
     bydelLbl: "Degmo",
     live: "Boosaska bannaan hadda",
+    phone: "Taleefan",
     lastUpdated: "Markii ugu dambeysay la cusboonaysiiyay",
     liveLoading: "Waa la soo dejinayaa...",
     liveError: "Xogta lama soo dejin karin",
@@ -266,6 +273,7 @@ const I18N = {
     address: "Adres",
     bydelLbl: "İlçe",
     live: "Şu an boş yerler",
+    phone: "Telefon",
     lastUpdated: "Son güncelleme",
     liveLoading: "Yükleniyor...",
     liveError: "Veriler yüklenemedi",
@@ -294,6 +302,7 @@ const I18N = {
     address: "Adres",
     bydelLbl: "Dzielnica",
     live: "Wolne miejsca teraz",
+    phone: "Telefon",
     lastUpdated: "Ostatnia aktualizacja",
     liveLoading: "Ładowanie...",
     liveError: "Nie udało się załadować danych",
@@ -322,6 +331,7 @@ const I18N = {
     address: "Địa chỉ",
     bydelLbl: "Quận",
     live: "Chỗ trống hiện tại",
+    phone: "Điện thoại",
     lastUpdated: "Cập nhật lần cuối",
     liveLoading: "Đang tải...",
     liveError: "Không thể tải dữ liệu",
@@ -350,6 +360,7 @@ const I18N = {
     address: "पता",
     bydelLbl: "जिला",
     live: "अभी उपलब्ध स्थान",
+    phone: "फ़ोन",
     lastUpdated: "अंतिम अपडेट",
     liveLoading: "लोड हो रहा है...",
     liveError: "डेटा लोड नहीं हो सका",
@@ -378,6 +389,7 @@ const I18N = {
     address: "آدرس",
     bydelLbl: "منطقه",
     live: "جاهای خالی اکنون",
+    phone: "تلفن",
     lastUpdated: "آخرین به‌روزرسانی",
     liveLoading: "در حال بارگذاری...",
     liveError: "بارگذاری داده‌ها ممکن نشد",
@@ -592,6 +604,18 @@ function buildAddressHtml(r) {
   return `<a class="addr-link" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener">${escapeHtml(address)}</a>`;
 }
 
+// Norwegian numbers are 8 digits: mobiles (4x/9x) read as xxx xx xxx, landlines as xx xx xx xx.
+function formatPhone(digits) {
+  if (/^[49]/.test(digits)) return `${digits.slice(0, 3)} ${digits.slice(3, 5)} ${digits.slice(5)}`;
+  return digits.replace(/(\d{2})(?=\d)/g, "$1 ");
+}
+
+function buildPhoneHtml(r) {
+  const digits = String(r.phone || "").replace(/\D/g, "");
+  if (!/^\d{8}$/.test(digits)) return "";
+  return `<a class="addr-link" href="tel:+47${digits}">${escapeHtml(formatPhone(digits))}</a>`;
+}
+
 // In live mode, the per-bydel "oppdatert" date from the source page.
 function liveUpdatedText(r) {
   if (!liveMode || !liveData) return "";
@@ -611,6 +635,8 @@ function buildPopupHtml(r) {
   if (updated) parts.push(escapeHtml(updated));
   const address = buildAddressHtml(r);
   if (address) parts.push(address);
+  const phone = buildPhoneHtml(r);
+  if (phone) parts.push(`☎ ${phone}`);
   return parts.join("<br>");
 }
 
@@ -660,6 +686,8 @@ function renderResults(rows) {
     const updated = liveUpdatedText(r);
     const updatedHtml = updated ? `<div class="meta live-updated">${escapeHtml(updated)}</div>` : "";
     const addressHtml = buildAddressHtml(r) || "-";
+    const phoneHtml = buildPhoneHtml(r);
+    const phoneLine = phoneHtml ? `<div class="meta">${t("phone")}: ${phoneHtml}</div>` : "";
     return `
       <article class="card">
         <h3>${escapeHtml(r.barnehage)}</h3>
@@ -670,10 +698,47 @@ function renderResults(rows) {
         </div>
         ${updatedHtml}
         <div class="meta">${t("address")}: ${addressHtml}</div>
+        ${phoneLine}
         <div>${link}</div>
       </article>
     `;
   }).join("");
+}
+
+// --- Filter state in the URL --------------------------------------------------
+// Filters live in the query string (?bydel=Alna&mode=liten&q=...&zip=...&min=...&lang=...)
+// so a filtered view can be bookmarked or shared. Defaults are omitted, and
+// replaceState keeps typing in the search box from flooding browser history.
+function applyFiltersFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const lang = p.get("lang");
+  if (lang && I18N[lang]) ui.lang.value = lang;
+  const q = p.get("q");
+  if (q) ui.search.value = q;
+  const bydel = p.get("bydel");
+  if (bydel && [...ui.bydel.options].some(o => o.value === bydel)) ui.bydel.value = bydel;
+  const zip = p.get("zip");
+  if (zip && [...ui.zipCode.options].some(o => o.value === zip)) ui.zipCode.value = zip;
+  const m = p.get("mode");
+  if (m === "liten" || m === "stor") {
+    mode = m;
+    ui.modeButtons.forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+  }
+  const min = Number(p.get("min"));
+  if (Number.isFinite(min) && min > 0) ui.minSpots.value = String(min);
+}
+
+function syncUrl() {
+  const p = new URLSearchParams();
+  const q = ui.search.value.trim();
+  if (q) p.set("q", q);
+  if (ui.bydel.value !== "ALL") p.set("bydel", ui.bydel.value);
+  if (ui.zipCode.value !== "ALL") p.set("zip", ui.zipCode.value);
+  if (mode !== "both") p.set("mode", mode);
+  if (Number(ui.minSpots.value) > 0) p.set("min", String(Number(ui.minSpots.value)));
+  if (ui.lang.value !== "no") p.set("lang", ui.lang.value);
+  const qs = p.toString();
+  history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
 
 function refresh() {
@@ -681,6 +746,7 @@ function refresh() {
   renderStats(rows);
   renderMap(rows);
   renderResults(rows);
+  syncUrl();
 }
 
 function bind() {
@@ -807,6 +873,8 @@ async function init() {
 
   loadBydeler(allRows);
   loadZipCodes(allRows);
+  applyFiltersFromUrl();
+  setLanguage();
   refresh();
 }
 

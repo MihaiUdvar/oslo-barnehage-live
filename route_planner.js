@@ -1,5 +1,6 @@
 const ui = {
   startPoint: document.getElementById("startPoint"),
+  geoBtn: document.getElementById("geoBtn"),
   bydelSelect: document.getElementById("bydelSelect"),
   buildBtn: document.getElementById("buildBtn"),
   shareBtn: document.getElementById("shareBtn"),
@@ -133,6 +134,18 @@ function buildAddressHtml(r) {
   return `<a class="addr-link" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener">${escapeHtml(address)}</a>`;
 }
 
+// Norwegian numbers are 8 digits: mobiles (4x/9x) read as xxx xx xxx, landlines as xx xx xx xx.
+function formatPhone(digits) {
+  if (/^[49]/.test(digits)) return `${digits.slice(0, 3)} ${digits.slice(3, 5)} ${digits.slice(5)}`;
+  return digits.replace(/(\d{2})(?=\d)/g, "$1 ");
+}
+
+function buildPhoneHtml(r) {
+  const digits = String(r.phone || "").replace(/\D/g, "");
+  if (!/^\d{8}$/.test(digits)) return "";
+  return `<a class="addr-link" href="tel:+47${digits}">${escapeHtml(formatPhone(digits))}</a>`;
+}
+
 function buildLinkHtml(row) {
   const osloUrl = row.barnehage_url;
   const faktaUrl = getBarnehagefaktaUrl(row);
@@ -175,6 +188,8 @@ function buildCardHtml(row, orderIndex, distanceKm, mode) {
 
   const key = routeKey(row);
   const note = notesCache[key] || {};
+  const phoneHtml = buildPhoneHtml(row);
+  const phoneLine = phoneHtml ? `<div class="meta">Telefon: ${phoneHtml}</div>` : "";
 
   return `
     <article class="card${s ? "" : " card-no-live"}" data-key="${escapeHtml(key)}">
@@ -187,6 +202,7 @@ function buildCardHtml(row, orderIndex, distanceKm, mode) {
       <div class="meta route-distance">${distanceLabel}</div>
       ${updatedHtml}
       <div class="meta">Adresse: ${addressHtml}</div>
+      ${phoneLine}
       <div>${link}</div>
       <div class="note-row">
         <textarea class="note-input" rows="2" placeholder="Notat etter besøk...">${escapeHtml(note.note || "")}</textarea>
@@ -667,8 +683,30 @@ async function resolveShortLink(rawUrl) {
   return null;
 }
 
+// Geocode a typed street address via Kartverket's open address API (no key needed).
+// Oslo (kommune 0301) is tried first so common street names don't resolve to other
+// cities; anything the user types with an explicit place still matches nationwide.
+async function geocodeAddress(text) {
+  const base = "https://ws.geonorge.no/adresser/v1/sok";
+  for (const extra of [{ kommunenummer: "0301" }, {}]) {
+    const params = new URLSearchParams({ sok: text, treffPerSide: "1", ...extra });
+    try {
+      const res = await fetch(`${base}?${params}`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const hit = data && Array.isArray(data.adresser) && data.adresser[0];
+      const p = hit && hit.representasjonspunkt;
+      if (p && isValidLatLon(p.lat, p.lon)) return { lat: p.lat, lon: p.lon };
+    } catch {
+      // Network error — try the next variant; caller reports failure.
+    }
+  }
+  return null;
+}
+
 // Returns { point } on success, or { point: null, isShortLink } so the caller can
 // give a more specific error when a recognized short link failed to resolve.
+// Non-URL text that doesn't parse as coordinates is treated as a street address.
 async function resolveStartPoint(text) {
   const s = (text || "").trim();
   const local = parseStartPoint(s);
@@ -678,7 +716,8 @@ async function resolveStartPoint(text) {
   try {
     url = new URL(s);
   } catch {
-    return { point: null, isShortLink: false };
+    const point = s ? await geocodeAddress(s) : null;
+    return { point, isShortLink: false };
   }
   if (!SHORT_LINK_HOSTS.has(url.hostname)) return { point: null, isShortLink: false };
 
@@ -698,7 +737,7 @@ async function buildRoute() {
 
   ui.buildBtn.disabled = true;
   const originalLabel = ui.buildBtn.textContent;
-  ui.buildBtn.textContent = "Løser lenke...";
+  ui.buildBtn.textContent = "Finner startpunkt...";
   const { point, isShortLink } = await resolveStartPoint(ui.startPoint.value);
 
   if (!point && !bydel) {
@@ -713,7 +752,7 @@ async function buildRoute() {
     if (isShortLink) {
       showError("Kunne ikke løse den forkortede lenken. Prøv å lime inn den fulle Google Maps-adressen i stedet, eller skriv inn \"breddegrad,lengdegrad\".");
     } else {
-      showError("Kunne ikke lese startpunktet. Lim inn en Google Maps-lenke (forkortede maps.app.goo.gl-lenker fungerer også), eller skriv inn \"breddegrad,lengdegrad\".");
+      showError("Fant ikke startpunktet. Skriv en gateadresse (f.eks. \"Thorvald Meyers gate 38\"), lim inn en Google Maps-lenke, eller skriv inn \"breddegrad,lengdegrad\".");
     }
     return;
   }
@@ -788,6 +827,34 @@ async function init() {
 
   ui.buildBtn.addEventListener("click", buildRoute);
   ui.shareBtn.addEventListener("click", shareRoute);
+
+  // "Min posisjon": fill the start point with the device's location as lat,lng —
+  // the format parseStartPoint already reads. Needs a secure context (https/localhost).
+  ui.geoBtn.addEventListener("click", () => {
+    hideError();
+    if (!navigator.geolocation) {
+      showError("Posisjon støttes ikke i denne nettleseren. Skriv inn adresse i stedet.");
+      return;
+    }
+    ui.geoBtn.disabled = true;
+    const original = ui.geoBtn.textContent;
+    ui.geoBtn.textContent = "Henter...";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        ui.geoBtn.disabled = false;
+        ui.geoBtn.textContent = original;
+        ui.startPoint.value = `${pos.coords.latitude.toFixed(6)},${pos.coords.longitude.toFixed(6)}`;
+      },
+      (err) => {
+        ui.geoBtn.disabled = false;
+        ui.geoBtn.textContent = original;
+        showError(err && err.code === 1
+          ? "Posisjonstilgang ble avslått. Tillat posisjon for dette nettstedet i nettleseren og prøv igjen."
+          : "Kunne ikke hente posisjonen din akkurat nå. Skriv inn adresse i stedet.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
 
   // Saved-routes bar: load or delete via event delegation (CSP blocks inline handlers).
   ui.savedRoutesList.addEventListener("click", (event) => {
